@@ -9,6 +9,31 @@ interface ChatWidgetMessageViewProps
     bubbleWidth?: number;
 }
 
+// Link regex to detect URLs in text
+const URL_PATTERN = /(https?:\/\/[^\s<]+[^<.,:;"')\]\s])/g;
+
+// Function to safely convert URLs to anchor tags while escaping HTML
+const addLinksToText = (text: string): string => {
+    // First escape HTML to prevent XSS
+    const escapeHTML = (str: string): string => {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    };
+    
+    // Escape the HTML first
+    const escapedText = escapeHTML(text);
+    
+    // Replace URLs with anchor tags
+    return escapedText.replace(URL_PATTERN, (url) => {
+        // Additional URL validation can be added here if needed
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`;
+    });
+};
+
 export const ChatWidgetMessageView: FC<ChatWidgetMessageViewProps> = props =>
 {
     const { chat = null, makeRoom = null, bubbleWidth = RoomChatSettings.CHAT_BUBBLE_WIDTH_NORMAL } = props;
@@ -28,6 +53,11 @@ export const ChatWidgetMessageView: FC<ChatWidgetMessageViewProps> = props =>
                 return 2000;
         }
     }, [ bubbleWidth ]);
+
+    // Process the message text to include safe links
+    const processedMessage = useMemo(() => {
+        return addLinksToText(chat?.formattedText || '');
+    }, [chat?.formattedText]);
 
     useEffect(() =>
     {
@@ -75,6 +105,14 @@ export const ChatWidgetMessageView: FC<ChatWidgetMessageViewProps> = props =>
         setIsVisible(true);
     }, [ chat, isReady, isVisible, makeRoom ]);
 
+    // Handle link clicks to prevent default bubble click behavior when clicking links
+    const handleMessageClick = (event: React.MouseEvent<HTMLElement>) => {
+        const target = event.target as HTMLElement;
+        if (target.tagName === 'A') {
+            event.stopPropagation(); // Prevent room object selection when clicking links
+        }
+    };
+
     return (
         <div ref={ elementRef } className={ `bubble-container ${ isVisible ? 'visible' : 'invisible' }` } onClick={ event => GetRoomEngine().selectRoomObject(chat.roomId, chat.senderId, RoomObjectCategory.UNIT) }>
             { (chat.styleId === 0) &&
@@ -86,7 +124,11 @@ export const ChatWidgetMessageView: FC<ChatWidgetMessageViewProps> = props =>
                 </div>
                 <div className="chat-content">
                     <b className="username mr-1" dangerouslySetInnerHTML={ { __html: `${ chat.username }: ` } } />
-                    <span className="message" dangerouslySetInnerHTML={ { __html: `${ chat.formattedText }` } } />
+                    <span 
+                        className="message" 
+                        dangerouslySetInnerHTML={ { __html: processedMessage } }
+                        onClick={handleMessageClick}
+                    />
                 </div>
                 <div className="pointer" />
             </div>
